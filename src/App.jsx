@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import ConversionWorkspace from "./ConversionWorkspace";
+import { createImagePreviewURL, isSupportedImage, loadImage } from "./imageFiles";
 
 const EXAM_PRESETS = [
   { id: "upsc-photo", exam: "UPSC", type: "Photo", width: 350, height: 350, maxKB: 100, hint: "Passport photo" },
@@ -22,7 +24,6 @@ const GENERAL_PRESETS = [
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_OUTPUT_PIXELS = 25_000_000;
 const MAX_QUEUE_FILES = 10;
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 function Icon({ name, className = "h-5 w-5" }) {
   const shared = {
@@ -63,19 +64,6 @@ function formatBytes(bytes) {
 function normalizeInput(value) {
   const number = Number(value);
   return Math.min(10000, Math.max(1, Math.round(Number.isFinite(number) ? number : 1)));
-}
-
-function loadImage(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => resolve({ image, url });
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("This image could not be opened. Try a different JPG, PNG, or WebP file."));
-    };
-    image.src = url;
-  });
 }
 
 function canvasToBlob(canvas, quality) {
@@ -203,6 +191,8 @@ function App() {
   const [enhanceSignature, setEnhanceSignature] = useState(false);
   const [error, setError] = useState("");
   const [shareStatus, setShareStatus] = useState("");
+  const [activeTool, setActiveTool] = useState("crop");
+  const [conversionBusy, setConversionBusy] = useState(false);
   const shareTimerRef = useRef(null);
 
   useEffect(() => () => {
@@ -241,40 +231,40 @@ function App() {
     shareTimerRef.current = window.setTimeout(() => setShareStatus(""), 2200);
   }
 
-  function addFiles(fileList) {
+  async function addFiles(fileList) {
     setError("");
     const files = Array.from(fileList || []);
-    const validFiles = [];
+    const additions = [];
+    const knownFiles = new Set(queue.map(({ file }) => `${file.name}:${file.size}:${file.lastModified}`));
     const issues = [];
 
-    files.forEach((candidate) => {
-      if (!ACCEPTED_TYPES.includes(candidate.type)) {
-        issues.push(`${candidate.name}: use JPG, PNG, or WebP.`);
+    for (const candidate of files) {
+      if (!isSupportedImage(candidate)) {
+        issues.push(`${candidate.name}: use JPG, PNG, WebP, or HEIC.`);
       } else if (candidate.size > MAX_FILE_BYTES) {
         issues.push(`${candidate.name}: larger than the 20 MB limit.`);
       } else {
-        validFiles.push(candidate);
+        const signature = `${candidate.name}:${candidate.size}:${candidate.lastModified}`;
+        if (knownFiles.has(signature)) continue;
+        if (queue.length + additions.length >= MAX_QUEUE_FILES) {
+          issues.push(`${candidate.name}: the queue is limited to ${MAX_QUEUE_FILES} images.`);
+          continue;
+        }
+        try {
+          const sourceUrl = await createImagePreviewURL(candidate);
+          const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          sourceUrlsRef.current.set(id, sourceUrl);
+          additions.push({ id, file: candidate, sourceUrl, status: "ready", output: null, error: "" });
+          knownFiles.add(signature);
+        } catch (previewError) {
+          issues.push(`${candidate.name}: ${previewError instanceof Error ? previewError.message : "Could not read this image."}`);
+        }
       }
-    });
+    }
 
-    const knownFiles = new Set(queue.map(({ file }) => `${file.name}:${file.size}:${file.lastModified}`));
-    const additions = [];
-    validFiles.forEach((candidate) => {
-      const signature = `${candidate.name}:${candidate.size}:${candidate.lastModified}`;
-      if (knownFiles.has(signature)) return;
-      if (queue.length + additions.length >= MAX_QUEUE_FILES) {
-        issues.push(`${candidate.name}: the queue is limited to ${MAX_QUEUE_FILES} images.`);
-        return;
-      }
-      knownFiles.add(signature);
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const sourceUrl = URL.createObjectURL(candidate);
-      sourceUrlsRef.current.set(id, sourceUrl);
-      additions.push({ id, file: candidate, sourceUrl, status: "ready", output: null, error: "" });
-    });
     if (additions.length) {
       setQueue((current) => [...current, ...additions]);
-      if (!selectedId) setSelectedId(additions[0].id);
+      setSelectedId((current) => current || additions[0].id);
     }
     if (issues.length) setError(issues.join(" "));
   }
@@ -427,7 +417,7 @@ function App() {
             </span>
             <span className="min-w-0">
               <span className="block whitespace-nowrap text-[15px] font-extrabold tracking-tight text-ink sm:text-base">VisionCrop <span className="text-brand-600">Infinity</span></span>
-              <span className="block whitespace-nowrap text-[9px] font-bold tracking-[0.12em] text-slate-500 sm:text-[10px] sm:tracking-[0.16em]">FREE IMAGE RESIZER & COMPRESSOR</span>
+              <span className="block whitespace-nowrap text-[9px] font-bold tracking-[0.12em] text-slate-500 sm:text-[10px] sm:tracking-[0.16em]">PRIVATE, ON-DEVICE IMAGE TOOLS</span>
             </span>
           </a>
           <div className="flex items-center gap-2 sm:gap-4">
@@ -449,26 +439,48 @@ function App() {
       </header>
 
       <main className="mx-auto max-w-7xl px-5 pb-16 pt-10 sm:px-8 sm:pt-14">
-        <div className="mx-auto mb-12 max-w-3xl text-center">
+        <div className="mx-auto mb-8 max-w-3xl text-center">
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white px-4 py-2 text-xs font-bold text-brand-700 shadow-sm">
             <Icon name="sparkles" className="h-4 w-4" />
-            Precise image sizing, made simple
+            Your images, your device
           </div>
           <h1 className="text-4xl font-black leading-[1.08] tracking-[-0.045em] text-ink sm:text-6xl">
             Every image, <span className="text-brand-600">just right.</span>
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
-            Resize and compress photos for job applications, document uploads, passport photos,
-            portal forms, competitive exams, and the web — privately in your browser.
+            Crop, resize, convert formats, and create PDFs — all privately in your browser.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2 text-xs font-semibold text-slate-600">
-            {["No uploads", "Exact pixel dimensions", "Target file size"].map((item) => (
+            {["No uploads", "JPG · PNG · WebP · HEIC", "Fast, on-device tools"].map((item) => (
               <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">{item}</span>
             ))}
           </div>
         </div>
 
-        <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <nav className="mx-auto mb-7 flex max-w-fit flex-wrap justify-center gap-1 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm" role="tablist" aria-label="Image tools">
+          {[
+            { id: "crop", label: "Crop & Resize" },
+            { id: "pdf", label: "Image to PDF" },
+            { id: "converter", label: "Format Converter" },
+          ].map((tool) => (
+            <button
+              key={tool.id}
+              id={`tool-tab-${tool.id}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTool === tool.id}
+              aria-controls={tool.id === "crop" ? "tool-panel-crop" : "tool-panel-conversion"}
+              tabIndex={activeTool === tool.id ? 0 : -1}
+              disabled={busy || conversionBusy}
+              onClick={() => setActiveTool(tool.id)}
+              className={`rounded-xl px-4 py-2.5 text-xs font-bold transition sm:px-5 sm:text-sm ${activeTool === tool.id ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"} disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {tool.label}
+            </button>
+          ))}
+        </nav>
+
+        <div id="tool-panel-crop" role="tabpanel" aria-labelledby="tool-tab-crop" hidden={activeTool !== "crop"} style={{ display: activeTool === "crop" ? "grid" : "none" }} className="grid items-start gap-7 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
           <section className="space-y-7">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-7">
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -574,7 +586,7 @@ function App() {
               <input
                 ref={inputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
                 multiple
                 className="sr-only"
                 onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }}
@@ -590,7 +602,7 @@ function App() {
               >
                 <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-brand-600 shadow-sm"><Icon name="upload" className="h-5 w-5" /></span>
                 <span className="text-sm font-bold text-slate-800">Drop images here or <span className="text-brand-600">browse files</span></span>
-                <span className="mt-1 text-xs text-slate-500">JPG, PNG or WebP · up to 20 MB each · {queue.length}/{MAX_QUEUE_FILES} in queue</span>
+                <span className="mt-1 text-xs text-slate-500">JPG, PNG, WebP or HEIC · up to 20 MB each · {queue.length}/{MAX_QUEUE_FILES} in queue</span>
               </button>
               {queue.length > 0 && (
                 <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
@@ -710,6 +722,9 @@ function App() {
             </div>
           </aside>
         </div>
+        <div id="tool-panel-conversion" role="tabpanel" aria-labelledby={`tool-tab-${activeTool === "crop" ? "pdf" : activeTool}`} hidden={activeTool === "crop"} style={{ display: activeTool === "crop" ? "none" : "block" }}>
+            <ConversionWorkspace mode={activeTool} onBusyChange={setConversionBusy} />
+        </div>
       </main>
       <section className="border-t border-slate-200 bg-white py-14 sm:py-20" aria-labelledby="about-heading">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
@@ -718,7 +733,7 @@ function App() {
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">About VisionCrop Infinity</p>
               <h2 id="about-heading" className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-4xl">Image-ready, without the upload.</h2>
               <p className="mt-5 text-sm leading-7 text-slate-600">
-                VisionCrop Infinity is a free, browser-based tool for cropping, resizing, and compressing images to a target KB size. Use it for UPSC, SSC, and Banking application portals, job applications, passport-style photos, document uploads, social profiles, and everyday web forms.
+                VisionCrop Infinity is a free, browser-based toolkit for cropping and resizing images, converting JPG, PNG, WebP, and HEIC files, and creating PDFs. Use it for application portals, job applications, passport-style photos, document uploads, social profiles, and everyday web forms.
               </p>
               <p className="mt-4 text-sm leading-7 text-slate-600">
                 Image decoding and editing happen locally in your browser with HTML5 Canvas. Your selected photos are not sent to VisionCrop servers; they stay on your device while you work.
@@ -742,13 +757,13 @@ function App() {
               </div>
               <div className="rounded-2xl border border-slate-200 bg-[#f9fafc] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-6">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-brand-700"><Icon name="sparkles" className="h-5 w-5" /></span>
-                <h3 className="mt-4 text-base font-extrabold text-ink">Signature cleaner</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Optionally convert gray paper to white and dark strokes to black for a higher-contrast signature or handwriting scan.</p>
+                <h3 className="mt-4 text-base font-extrabold text-ink">Format conversion & PDF</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Convert HEIC, JPG, PNG, and WebP files, or fit multiple images onto A4 PDF pages.</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-[#f9fafc] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-6">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-brand-700"><Icon name="lock" className="h-5 w-5" /></span>
                 <h3 className="mt-4 text-base font-extrabold text-ink">Free and on-device</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">No account or image upload is needed. JPG, PNG, and WebP files up to 20 MB each are supported by the current browser tool.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">No account or image upload is needed. JPG, PNG, WebP, and HEIC files up to 20 MB each are processed on-device.</p>
               </div>
             </div>
           </div>
@@ -785,14 +800,14 @@ function App() {
                   How does batch processing and the signature cleaner work?
                   <span className="text-xl font-medium text-brand-600 transition group-open:rotate-45">+</span>
                 </summary>
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Add up to 10 supported images to the queue and process them using the same dimensions, size limit, and enhancement setting. Each result can be previewed and downloaded separately. The optional signature cleaner converts pixels to black or white; it is intended for signatures and handwriting and may not suit color photos.</p>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Add up to 10 JPG, PNG, WebP, or HEIC images to the crop queue and process them using the same dimensions, size limit, and enhancement setting. Each result can be previewed and downloaded separately. The optional signature cleaner converts pixels to black or white; it is intended for signatures and handwriting and may not suit color photos.</p>
               </details>
               <details className="group py-5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-bold text-slate-800">
                   Is VisionCrop Infinity free, and what files can I use?
                   <span className="text-xl font-medium text-brand-600 transition group-open:rotate-45">+</span>
                 </summary>
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">The tool is free to use and needs no account. It accepts JPG, PNG, and WebP images up to 20 MB each, with up to 10 queued per batch. You can run additional batches as needed; browser memory and device performance may affect very large images.</p>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">The tool is free to use and needs no account. It accepts JPG, PNG, WebP, and HEIC images up to 20 MB each, with up to 10 queued per batch. Convert images to JPG, PNG, or WebP, or create a multi-page PDF. You can run additional batches as needed; browser memory and device performance may affect very large images.</p>
               </details>
             </div>
           </div>
