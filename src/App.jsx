@@ -60,6 +60,11 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function normalizeInput(value) {
+  const number = Number(value);
+  return Math.min(10000, Math.max(1, Math.round(Number.isFinite(number) ? number : 1)));
+}
+
 function loadImage(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -296,8 +301,19 @@ function App() {
   }
 
   function updateWidth(value) {
+    if (value === "") {
+      setWidth("");
+      setActivePreset("");
+      invalidateOutputs();
+      return;
+    }
     const next = Number(value);
-    if (!Number.isInteger(next) || next < 1 || next > 10000) return;
+    if (!Number.isInteger(next) || next < 1 || next > 10000) {
+      setWidth(value);
+      setActivePreset("");
+      invalidateOutputs();
+      return;
+    }
     setWidth(next);
     if (ratioLocked) setHeight(Math.min(10000, Math.max(1, Math.round(next / aspectRatio))));
     setActivePreset("");
@@ -305,8 +321,19 @@ function App() {
   }
 
   function updateHeight(value) {
+    if (value === "") {
+      setHeight("");
+      setActivePreset("");
+      invalidateOutputs();
+      return;
+    }
     const next = Number(value);
-    if (!Number.isInteger(next) || next < 1 || next > 10000) return;
+    if (!Number.isInteger(next) || next < 1 || next > 10000) {
+      setHeight(value);
+      setActivePreset("");
+      invalidateOutputs();
+      return;
+    }
     setHeight(next);
     if (ratioLocked) setWidth(Math.min(10000, Math.max(1, Math.round(next * aspectRatio))));
     setActivePreset("");
@@ -314,8 +341,17 @@ function App() {
   }
 
   function updateMaxKB(value) {
+    if (value === "") {
+      setMaxKB("");
+      invalidateOutputs();
+      return;
+    }
     const next = Number(value);
-    if (!Number.isFinite(next) || next < 1 || next > 10000) return;
+    if (!Number.isFinite(next) || next < 1 || next > 10000) {
+      setMaxKB(value);
+      invalidateOutputs();
+      return;
+    }
     setMaxKB(Math.round(next));
     invalidateOutputs();
   }
@@ -326,7 +362,7 @@ function App() {
   }
 
   function toggleRatioLock() {
-    if (!ratioLocked) setAspectRatio(width / height);
+    if (!ratioLocked) setAspectRatio(normalizeInput(width) / normalizeInput(height));
     setRatioLocked((locked) => !locked);
   }
 
@@ -493,17 +529,17 @@ function App() {
               <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr_1.1fr] sm:items-end">
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold text-slate-600">Width (pixels)</span>
-                  <input type="number" min="1" max="10000" value={width} disabled={busy} onChange={(event) => updateWidth(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100" />
+                  <input type="number" min="1" max="10000" step="1" value={width} disabled={busy} onChange={(event) => updateWidth(event.target.value)} onBlur={(event) => updateWidth(normalizeInput(event.target.value))} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100" />
                 </label>
                 <span className="hidden pb-3 text-slate-400 sm:block">×</span>
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold text-slate-600">Height (pixels)</span>
-                  <input type="number" min="1" max="10000" value={height} disabled={busy} onChange={(event) => updateHeight(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100" />
+                  <input type="number" min="1" max="10000" step="1" value={height} disabled={busy} onChange={(event) => updateHeight(event.target.value)} onBlur={(event) => updateHeight(normalizeInput(event.target.value))} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100" />
                 </label>
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold text-slate-600">Maximum file size</span>
                   <span className="flex items-center rounded-lg border border-slate-200 px-3">
-                    <input type="number" min="1" max="10000" step="1" value={maxKB} disabled={busy} onChange={(event) => updateMaxKB(event.target.value)} className="w-full border-0 bg-transparent py-2.5 text-sm font-semibold text-slate-800 outline-none focus:ring-0 disabled:text-slate-400" />
+                    <input type="number" min="1" max="10000" step="1" value={maxKB} disabled={busy} onChange={(event) => updateMaxKB(event.target.value)} onBlur={(event) => updateMaxKB(normalizeInput(event.target.value))} className="w-full border-0 bg-transparent py-2.5 text-sm font-semibold text-slate-800 outline-none focus:ring-0 disabled:text-slate-400" />
                     <span className="text-xs font-semibold text-slate-500">KB</span>
                   </span>
                 </label>
