@@ -7,9 +7,24 @@ const MAX_FILES = 10;
 const ACCEPTED_IMAGE_TYPES = "image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif";
 const FORMAT_OPTIONS = {
   JPG: { mimeType: "image/jpeg", extension: "jpg" },
+  JPEG: { mimeType: "image/jpeg", extension: "jpeg" },
   PNG: { mimeType: "image/png", extension: "png" },
   WebP: { mimeType: "image/webp", extension: "webp" },
 };
+const SOURCE_FORMATS = ["JPG", "JPEG", "PNG", "WebP", "HEIC"];
+
+function matchesSourceFormat(file, sourceFormat) {
+  if (sourceFormat === "all") return true;
+  const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+  const extensions = {
+    JPG: [".jpg"],
+    JPEG: [".jpeg"],
+    PNG: [".png"],
+    WebP: [".webp"],
+    HEIC: [".heic", ".heif"],
+  };
+  return extensions[sourceFormat].includes(extension);
+}
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -106,6 +121,7 @@ function ConversionWorkspace({ mode, onBusyChange }) {
   const filesRef = useRef([]);
   const urlsRef = useRef(new Set());
   const [files, setFiles] = useState([]);
+  const [sourceFormat, setSourceFormat] = useState("all");
   const [format, setFormat] = useState("JPG");
   const [quality, setQuality] = useState(90);
   const [paper, setPaper] = useState("a4");
@@ -147,6 +163,16 @@ function ConversionWorkspace({ mode, onBusyChange }) {
     setStatus("");
   }
 
+  function changeSourceFormat(nextFormat) {
+    setSourceFormat(nextFormat);
+    clearOutputs();
+    const retainedFiles = filesRef.current.filter((entry) => matchesSourceFormat(entry.file, nextFormat));
+    filesRef.current.filter((entry) => !matchesSourceFormat(entry.file, nextFormat))
+      .forEach((entry) => revokeURL(entry.previewUrl));
+    filesRef.current = retainedFiles;
+    setFiles(retainedFiles);
+  }
+
   async function addFiles(fileList) {
     setError("");
     setStatus("");
@@ -156,6 +182,10 @@ function ConversionWorkspace({ mode, onBusyChange }) {
       for (const file of Array.from(fileList || [])) {
         if (!isSupportedImage(file)) {
           issues.push(`${file.name}: use JPG, PNG, WebP, or HEIC.`);
+          continue;
+        }
+        if (!matchesSourceFormat(file, sourceFormat)) {
+          issues.push(`${file.name}: does not match the selected source format (${sourceFormat}).`);
           continue;
         }
         if (file.size > MAX_FILE_BYTES) {
@@ -241,7 +271,7 @@ function ConversionWorkspace({ mode, onBusyChange }) {
           const { image, url } = await loadImage(entry.file);
           let blob;
           try {
-            const canvas = canvasForImage(image, format === "JPG");
+            const canvas = canvasForImage(image, format === "JPG" || format === "JPEG");
             blob = await saveCanvas(canvas, mimeType, format === "PNG" ? undefined : quality / 100);
           } finally {
             URL.revokeObjectURL(url);
@@ -269,14 +299,14 @@ function ConversionWorkspace({ mode, onBusyChange }) {
     <section className="mx-auto max-w-4xl space-y-6" aria-labelledby="conversion-heading">
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-soft sm:p-7">
         <div className="mb-5">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-600">{isPdf ? "Image to PDF" : "Format converter"}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-600">{isPdf ? "Image to PDF" : "Image converter"}</p>
           <h2 id="conversion-heading" className="mt-1 text-xl font-extrabold tracking-tight text-ink">
-            {isPdf ? "Turn your images into a PDF" : "Convert images to another format"}
+            {isPdf ? "Turn your images into a PDF" : "Convert between image formats"}
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
             {isPdf
               ? "Each image gets its own A4 page and is fitted proportionally. HEIC images are decoded locally."
-              : "Convert JPG, PNG, WebP, or HEIC images in your browser. Your files stay on this device."}
+              : "Convert JPG, JPEG, PNG, WebP, or HEIC images in your browser. Your files stay on this device."}
           </p>
         </div>
 
@@ -301,7 +331,14 @@ function ConversionWorkspace({ mode, onBusyChange }) {
         ) : (
           <div className="mb-5 grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-2 block text-xs font-semibold text-slate-600">Target format</span>
+              <span className="mb-2 block text-xs font-semibold text-slate-600">Convert From</span>
+              <select value={sourceFormat} disabled={busy} onChange={(event) => changeSourceFormat(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100">
+                <option value="all">Auto-detect (all supported)</option>
+                {SOURCE_FORMATS.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-xs font-semibold text-slate-600">Convert To</span>
               <select value={format} disabled={busy} onChange={(event) => { clearOutputs(); setFormat(event.target.value); }} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100">
                 {Object.keys(FORMAT_OPTIONS).map((option) => <option key={option} value={option}>{option}</option>)}
               </select>

@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import ConversionWorkspace from "./ConversionWorkspace";
+import DocumentWorkspace from "./DocumentWorkspace";
+import MergePdfWorkspace from "./MergePdfWorkspace";
 import { createImagePreviewURL, isSupportedImage, loadImage } from "./imageFiles";
 
 const EXAM_PRESETS = [
-  { id: "upsc-photo", exam: "UPSC", type: "Photo", width: 350, height: 350, maxKB: 100, hint: "Passport photo" },
-  { id: "upsc-signature", exam: "UPSC", type: "Signature", width: 350, height: 150, maxKB: 20, hint: "Scanned signature" },
-  { id: "ssc-photo", exam: "SSC", type: "Photo", width: 100, height: 120, maxKB: 50, hint: "Candidate photo" },
-  { id: "ssc-signature", exam: "SSC", type: "Signature", width: 40, height: 20, maxKB: 20, hint: "Candidate signature" },
-  { id: "banking-photo", exam: "Banking", type: "Photo", width: 200, height: 230, maxKB: 50, hint: "IBPS / SBI photo" },
-  { id: "banking-signature", exam: "Banking", type: "Signature", width: 140, height: 60, maxKB: 20, hint: "IBPS / SBI signature" },
-  { id: "rrb-photo", exam: "RRB", type: "Photo", width: 200, height: 230, maxKB: 40, hint: "Railway exam photo" },
-  { id: "rrb-signature", exam: "RRB", type: "Signature", width: 140, height: 60, maxKB: 20, hint: "Railway exam signature" },
+  { id: "upsc", exam: "UPSC", photo: { width: 350, height: 350, maxKB: 100, hint: "Passport photo" }, signature: { width: 350, height: 150, maxKB: 20, hint: "Scanned signature" } },
+  { id: "ssc", exam: "SSC", photo: { width: 100, height: 120, maxKB: 50, hint: "Candidate photo" }, signature: { width: 40, height: 20, maxKB: 20, hint: "Scanned signature" } },
+  { id: "banking", exam: "Banking", photo: { width: 200, height: 230, maxKB: 50, hint: "IBPS / SBI photo" }, signature: { width: 140, height: 60, maxKB: 20, hint: "Scanned signature" } },
+  { id: "rrb", exam: "RRB", photo: { width: 200, height: 230, maxKB: 40, hint: "Railway exam photo" }, signature: { width: 140, height: 60, maxKB: 20, hint: "Scanned signature" } },
 ];
 
 const GENERAL_PRESETS = [
@@ -51,6 +49,7 @@ function Icon({ name, className = "h-5 w-5" }) {
     shield: <><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" /><path d="m9 12 2 2 4-4" /></>,
     refresh: <><path d="M20 7v5h-5" /><path d="M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" /></>,
     expand: <><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M21 16v3a2 2 0 0 1-2 2h-3" /></>,
+    grid: <><rect x="3" y="3" width="4" height="4" rx="1" /><rect x="10" y="3" width="4" height="4" rx="1" /><rect x="17" y="3" width="4" height="4" rx="1" /><rect x="3" y="10" width="4" height="4" rx="1" /><rect x="10" y="10" width="4" height="4" rx="1" /><rect x="17" y="10" width="4" height="4" rx="1" /><rect x="3" y="17" width="4" height="4" rx="1" /><rect x="10" y="17" width="4" height="4" rx="1" /><rect x="17" y="17" width="4" height="4" rx="1" /></>,
   };
   return <svg {...shared}>{paths[name]}</svg>;
 }
@@ -186,14 +185,19 @@ function App() {
   const [aspectRatio, setAspectRatio] = useState(1);
   const [activePreset, setActivePreset] = useState("upsc-photo");
   const [presetCategory, setPresetCategory] = useState("exam");
+  const [examPresetType, setExamPresetType] = useState("photo");
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [enhanceSignature, setEnhanceSignature] = useState(false);
   const [error, setError] = useState("");
   const [shareStatus, setShareStatus] = useState("");
   const [activeTool, setActiveTool] = useState("crop");
+  const [documentLaunchKey, setDocumentLaunchKey] = useState(0);
   const [conversionBusy, setConversionBusy] = useState(false);
   const shareTimerRef = useRef(null);
+  const launcherRef = useRef(null);
+  const launcherButtonRef = useRef(null);
+  const [isLauncherOpen, setIsLauncherOpen] = useState(false);
 
   useEffect(() => () => {
     sourceUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -202,6 +206,25 @@ function App() {
     downloadUrlsRef.current.clear();
     if (shareTimerRef.current) window.clearTimeout(shareTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!isLauncherOpen) return undefined;
+    function handleOutsideClick(event) {
+      if (!launcherRef.current?.contains(event.target)) setIsLauncherOpen(false);
+    }
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setIsLauncherOpen(false);
+        launcherButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isLauncherOpen]);
 
   async function copyPageLink() {
     try {
@@ -288,6 +311,24 @@ function App() {
     setMaxKB(preset.maxKB);
     setAspectRatio(preset.width / preset.height);
     invalidateOutputs();
+  }
+
+  function changeExamPresetType(type) {
+    setExamPresetType(type);
+    const activeExam = EXAM_PRESETS.find(({ id }) => activePreset.startsWith(`${id}-`)) || EXAM_PRESETS[0];
+    applyPreset({
+      id: `${activeExam.id}-${type}`,
+      exam: activeExam.exam,
+      type: type === "photo" ? "Photo" : "Signature",
+      ...activeExam[type],
+    });
+  }
+
+  function openTool(tool) {
+    if (busy || conversionBusy) return;
+    if (tool === "word" || tool === "pdf-image" || tool === "pdf-docx") setDocumentLaunchKey((key) => key + 1);
+    setActiveTool(tool);
+    setIsLauncherOpen(false);
   }
 
   function updateWidth(value) {
@@ -405,7 +446,14 @@ function App() {
   const sourceUrl = selectedItem?.sourceUrl || "";
   const output = selectedItem?.output || null;
   const meetsLimit = output?.meetsLimit;
-  const visiblePresets = presetCategory === "general" ? GENERAL_PRESETS : EXAM_PRESETS;
+  const visiblePresets = presetCategory === "general"
+    ? GENERAL_PRESETS
+    : EXAM_PRESETS.map((preset) => ({
+      id: `${preset.id}-${examPresetType}`,
+      exam: preset.exam,
+      type: examPresetType === "photo" ? "Photo" : "Signature",
+      ...preset[examPresetType],
+    }));
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
@@ -425,6 +473,54 @@ function App() {
               <a href="#about" className="transition-colors duration-200 hover:text-brand-700">About</a>
               <a href="#faq" className="transition-colors duration-200 hover:text-brand-700">FAQ</a>
             </nav>
+            <div ref={launcherRef} className="relative">
+              <button
+                ref={launcherButtonRef}
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={isLauncherOpen}
+                aria-controls="all-tools-launcher"
+                disabled={busy || conversionBusy}
+                onClick={() => setIsLauncherOpen((open) => !open)}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+              >
+                <Icon name="grid" className="h-4 w-4" />
+                All Tools
+              </button>
+              {isLauncherOpen && (
+                <div id="all-tools-launcher" role="dialog" aria-label="All tools" className="absolute right-0 top-[calc(100%+0.75rem)] z-30 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-900/10 animate-enter">
+                  <div className="px-2 pb-2 pt-1">
+                    <p className="text-sm font-extrabold text-slate-900">Choose a tool</p>
+                    <p className="mt-0.5 text-xs text-slate-500">Private, on-device image and document tools</p>
+                  </div>
+                  <div className="grid gap-1">
+                    {[
+                      { id: "crop", icon: "✂️", title: "Crop & Resize", description: "Exam presets & custom dimensions" },
+                      { id: "pdf", icon: "📑", title: "Image to PDF", description: "Combine multiple images into PDF" },
+                      { id: "converter", icon: "🔄", title: "Format Converter", description: "JPG, JPEG, PNG, WebP, HEIC" },
+                      { id: "word", icon: "📄", title: "Word to PDF", description: "Convert .docx files" },
+                      { id: "pdf-image", icon: "🖼️", title: "PDF to Image", description: "Extract pages to JPG or PNG" },
+                      { id: "pdf-docx", icon: "📄", title: "PDF to DOCX", description: "Convert PDF to editable Word document" },
+                      { id: "merge-pdf", icon: "📑", title: "Merge PDF", description: "Combine multiple PDF files into one" },
+                    ].map((tool) => (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        disabled={busy || conversionBusy}
+                        onClick={() => openTool(tool.id)}
+                        className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-blue-50 disabled:opacity-50 ${activeTool === tool.id ? "bg-blue-50" : ""}`}
+                      >
+                        <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xl">{tool.icon}</span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-bold text-slate-800">{tool.title}</span>
+                          <span className="mt-0.5 block text-xs text-slate-500">{tool.description}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <button type="button" onClick={copyPageLink} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 hover:text-brand-700 hover:shadow-sm active:translate-y-0 sm:gap-2 sm:px-3">
               <Icon name="copy" className="h-4 w-4" />
               <span>{shareStatus || "Copy link"}</span>
@@ -451,36 +547,14 @@ function App() {
             Crop, resize, convert formats, and create PDFs — all privately in your browser.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2 text-xs font-semibold text-slate-600">
-            {["No uploads", "JPG · PNG · WebP · HEIC", "Fast, on-device tools"].map((item) => (
+            {["No uploads", "JPG · JPEG · PNG · WebP · HEIC", "Fast, on-device tools"].map((item) => (
               <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">{item}</span>
             ))}
           </div>
         </div>
 
-        <nav className="mx-auto mb-7 flex max-w-fit flex-wrap justify-center gap-1 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm" role="tablist" aria-label="Image tools">
-          {[
-            { id: "crop", label: "Crop & Resize" },
-            { id: "pdf", label: "Image to PDF" },
-            { id: "converter", label: "Format Converter" },
-          ].map((tool) => (
-            <button
-              key={tool.id}
-              id={`tool-tab-${tool.id}`}
-              type="button"
-              role="tab"
-              aria-selected={activeTool === tool.id}
-              aria-controls={tool.id === "crop" ? "tool-panel-crop" : "tool-panel-conversion"}
-              tabIndex={activeTool === tool.id ? 0 : -1}
-              disabled={busy || conversionBusy}
-              onClick={() => setActiveTool(tool.id)}
-              className={`rounded-xl px-4 py-2.5 text-xs font-bold transition sm:px-5 sm:text-sm ${activeTool === tool.id ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"} disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              {tool.label}
-            </button>
-          ))}
-        </nav>
-
-        <div id="tool-panel-crop" role="tabpanel" aria-labelledby="tool-tab-crop" hidden={activeTool !== "crop"} style={{ display: activeTool === "crop" ? "grid" : "none" }} className="grid items-start gap-7 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <div id="tool-workspace" className="scroll-mt-24">
+        <div id="tool-panel-crop" aria-label="Crop and resize" hidden={activeTool !== "crop"} style={{ display: activeTool === "crop" ? "grid" : "none" }} className={`items-start gap-7 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] ${activeTool === "crop" ? "animate-enter grid" : ""}`}>
           <section className="space-y-7">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-7">
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -509,6 +583,27 @@ function App() {
                   </button>
                 ))}
               </div>
+              {presetCategory === "exam" && (
+                <div className="mb-4 flex justify-center sm:justify-start">
+                  <div className="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1" role="group" aria-label="Exam preset type">
+                    {[
+                      { id: "photo", label: "Photo" },
+                      { id: "signature", label: "Signature" },
+                    ].map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        disabled={busy}
+                        aria-pressed={examPresetType === type.id}
+                        onClick={() => changeExamPresetType(type.id)}
+                        className={`rounded-full px-4 py-2 text-xs font-bold transition ${examPresetType === type.id ? "bg-white text-brand-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                      >
+                        {type.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className={`grid grid-cols-2 gap-3 ${presetCategory === "general" ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
                 {visiblePresets.map((preset) => (
                   <button
@@ -602,7 +697,7 @@ function App() {
               >
                 <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-brand-600 shadow-sm"><Icon name="upload" className="h-5 w-5" /></span>
                 <span className="text-sm font-bold text-slate-800">Drop images here or <span className="text-brand-600">browse files</span></span>
-                <span className="mt-1 text-xs text-slate-500">JPG, PNG, WebP or HEIC · up to 20 MB each · {queue.length}/{MAX_QUEUE_FILES} in queue</span>
+                <span className="mt-1 text-xs text-slate-500">JPG, JPEG, PNG, WebP or HEIC · up to 20 MB each · {queue.length}/{MAX_QUEUE_FILES} in queue</span>
               </button>
               {queue.length > 0 && (
                 <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
@@ -722,8 +817,15 @@ function App() {
             </div>
           </aside>
         </div>
-        <div id="tool-panel-conversion" role="tabpanel" aria-labelledby={`tool-tab-${activeTool === "crop" ? "pdf" : activeTool}`} hidden={activeTool === "crop"} style={{ display: activeTool === "crop" ? "none" : "block" }}>
-            <ConversionWorkspace mode={activeTool} onBusyChange={setConversionBusy} />
+        <div id="tool-panel-conversion" aria-label={activeTool === "pdf" ? "Image to PDF" : "Format converter"} hidden={activeTool !== "converter" && activeTool !== "pdf"} style={{ display: activeTool === "converter" || activeTool === "pdf" ? "block" : "none" }} className={activeTool === "converter" || activeTool === "pdf" ? "animate-enter" : ""}>
+          <ConversionWorkspace mode={activeTool === "pdf" ? "pdf" : "converter"} onBusyChange={setConversionBusy} />
+        </div>
+        <div id="tool-panel-document" aria-label={activeTool === "pdf-image" ? "PDF to image" : activeTool === "pdf-docx" ? "PDF to Word" : "Word to PDF"} hidden={activeTool !== "word" && activeTool !== "pdf-image" && activeTool !== "pdf-docx"} style={{ display: activeTool === "word" || activeTool === "pdf-image" || activeTool === "pdf-docx" ? "block" : "none" }} className={activeTool === "word" || activeTool === "pdf-image" || activeTool === "pdf-docx" ? "animate-enter" : ""}>
+          <DocumentWorkspace key={`${activeTool}-${documentLaunchKey}`} initialMode={activeTool === "pdf-image" ? "images" : activeTool === "pdf-docx" ? "word" : "docx"} onBusyChange={setConversionBusy} />
+        </div>
+        <div id="tool-panel-merge-pdf" aria-label="Merge PDF" hidden={activeTool !== "merge-pdf"} style={{ display: activeTool === "merge-pdf" ? "block" : "none" }} className={activeTool === "merge-pdf" ? "animate-enter" : ""}>
+          <MergePdfWorkspace onBusyChange={setConversionBusy} />
+        </div>
         </div>
       </main>
       <section className="border-t border-slate-200 bg-white py-14 sm:py-20" aria-labelledby="about-heading">
@@ -733,10 +835,10 @@ function App() {
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">About VisionCrop Infinity</p>
               <h2 id="about-heading" className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-4xl">Image-ready, without the upload.</h2>
               <p className="mt-5 text-sm leading-7 text-slate-600">
-                VisionCrop Infinity is a free, browser-based toolkit for cropping and resizing images, converting JPG, PNG, WebP, and HEIC files, and creating PDFs. Use it for application portals, job applications, passport-style photos, document uploads, social profiles, and everyday web forms.
+                VisionCrop Infinity is a free, browser-based toolkit for cropping and resizing JPG, JPEG, PNG, WebP, and HEIC images, creating PDFs, and converting Word and PDF documents. Use it for application portals, job applications, passport-style photos, document uploads, social profiles, and everyday web forms.
               </p>
               <p className="mt-4 text-sm leading-7 text-slate-600">
-                Image decoding and editing happen locally in your browser with HTML5 Canvas. Your selected photos are not sent to VisionCrop servers; they stay on your device while you work.
+                Image decoding and editing happen locally in your browser with HTML5 Canvas. Document parsing and PDF creation also stay on your device; your files are not sent to VisionCrop servers.
               </p>
               <div className="mt-6 flex items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
                 <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-700"><Icon name="shield" className="h-4 w-4" /></span>
@@ -757,13 +859,13 @@ function App() {
               </div>
               <div className="rounded-2xl border border-slate-200 bg-[#f9fafc] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-6">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-brand-700"><Icon name="sparkles" className="h-5 w-5" /></span>
-                <h3 className="mt-4 text-base font-extrabold text-ink">Format conversion & PDF</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Convert HEIC, JPG, PNG, and WebP files, or fit multiple images onto A4 PDF pages.</p>
+                <h3 className="mt-4 text-base font-extrabold text-ink">Image & document conversion</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Convert JPG, JPEG, PNG, WebP, and HEIC images; create image PDFs; convert Word documents to PDF; and extract PDF text or page images.</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-[#f9fafc] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-6">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-brand-700"><Icon name="lock" className="h-5 w-5" /></span>
                 <h3 className="mt-4 text-base font-extrabold text-ink">Free and on-device</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">No account or image upload is needed. JPG, PNG, WebP, and HEIC files up to 20 MB each are processed on-device.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">No account or upload is needed. Images up to 20 MB and Word/PDF documents up to 30 MB are processed on-device.</p>
               </div>
             </div>
           </div>
@@ -807,7 +909,7 @@ function App() {
                   Is VisionCrop Infinity free, and what files can I use?
                   <span className="text-xl font-medium text-brand-600 transition group-open:rotate-45">+</span>
                 </summary>
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">The tool is free to use and needs no account. It accepts JPG, PNG, WebP, and HEIC images up to 20 MB each, with up to 10 queued per batch. Convert images to JPG, PNG, or WebP, or create a multi-page PDF. You can run additional batches as needed; browser memory and device performance may affect very large images.</p>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">The tool is free to use and needs no account. It accepts JPG, JPEG, PNG, WebP, and HEIC images up to 20 MB each, with up to 10 queued per batch. You can convert between image formats, create a multi-page PDF, turn .docx files into text-focused PDFs, and extract text or page images from PDFs up to 30 MB.</p>
               </details>
             </div>
           </div>

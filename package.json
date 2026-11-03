@@ -11,6 +11,11 @@
   "dependencies": {
     "heic2any": "^0.0.4",
     "jspdf": "^4.2.1",
+    "mammoth": "^1.9.1",
+    "pdfjs-dist": "^4.10.38",
+    "docx": "^9.5.1",
+    "tesseract.js": "^6.0.1",
+    "pdf-lib": "^1.17.1",
     "react": "latest",
     "react-dom": "latest"
   },
