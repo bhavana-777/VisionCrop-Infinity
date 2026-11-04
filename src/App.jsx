@@ -459,13 +459,13 @@ function App() {
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <header className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-          <a className="flex min-w-0 items-center gap-3" href="#" aria-label="VisionCrop Infinity home">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white shadow-lg shadow-blue-600/20">
+          <a className="flex min-w-0 items-center gap-3" href="#" aria-label="VisionCrop home">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-500/25">
               <Icon name="infinity" className="h-6 w-6" />
             </span>
             <span className="min-w-0">
-              <span className="block whitespace-nowrap text-[15px] font-extrabold tracking-tight text-ink sm:text-base">VisionCrop <span className="text-brand-600">Infinity</span></span>
-              <span className="block whitespace-nowrap text-[9px] font-bold tracking-[0.12em] text-slate-500 sm:text-[10px] sm:tracking-[0.16em]">PRIVATE, ON-DEVICE IMAGE TOOLS</span>
+              <span className="block whitespace-nowrap text-[15px] font-extrabold tracking-tight text-ink sm:text-base">VisionCrop</span>
+              <span className="block text-[10px] leading-4 text-slate-500">Crop, Resize &amp; Convert in Your Browser</span>
             </span>
           </a>
           <div className="flex items-center gap-2 sm:gap-4">
@@ -832,10 +832,10 @@ function App() {
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:gap-14">
             <div id="about">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">About VisionCrop Infinity</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">About VisionCrop</p>
               <h2 id="about-heading" className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-4xl">Image-ready, without the upload.</h2>
               <p className="mt-5 text-sm leading-7 text-slate-600">
-                VisionCrop Infinity is a free, browser-based toolkit for cropping and resizing JPG, JPEG, PNG, WebP, and HEIC images, creating PDFs, and converting Word and PDF documents. Use it for application portals, job applications, passport-style photos, document uploads, social profiles, and everyday web forms.
+                VisionCrop is a free, browser-based toolkit for cropping and resizing JPG, JPEG, PNG, WebP, and HEIC images, creating PDFs, and converting Word and PDF documents. Use it for application portals, job applications, passport-style photos, document uploads, social profiles, and everyday web forms.
               </p>
               <p className="mt-4 text-sm leading-7 text-slate-600">
                 Image decoding and editing happen locally in your browser with HTML5 Canvas. Document parsing and PDF creation also stay on your device; your files are not sent to VisionCrop servers.
@@ -906,7 +906,7 @@ function App() {
               </details>
               <details className="group py-5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-bold text-slate-800">
-                  Is VisionCrop Infinity free, and what files can I use?
+                  Is VisionCrop free, and what files can I use?
                   <span className="text-xl font-medium text-brand-600 transition group-open:rotate-45">+</span>
                 </summary>
                 <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">The tool is free to use and needs no account. It accepts JPG, JPEG, PNG, WebP, and HEIC images up to 20 MB each, with up to 10 queued per batch. You can convert between image formats, create a multi-page PDF, turn .docx files into text-focused PDFs, and extract text or page images from PDFs up to 30 MB.</p>
@@ -916,7 +916,7 @@ function App() {
         </div>
       </section>
       <footer className="border-t border-slate-200 bg-[#f9fafc] py-5 text-center text-xs text-slate-500">
-        VisionCrop Infinity · Free, private, in-browser image resizing
+        VisionCrop · Free, private, in-browser image resizing
       </footer>
     </div>
   );
